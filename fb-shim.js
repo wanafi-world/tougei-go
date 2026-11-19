@@ -194,25 +194,46 @@
     const go = () => location.replace(location.pathname + '?v=' + encodeURIComponent(v || Date.now().toString(36)));
     withTimeout(flush(), 8000).then(go, go);
   }
-  function showBtn(){
-    if(shown) return; shown = true;
-    const b = document.createElement('button');
-    b.id = 'tgUpd'; b.className = 'primary';
-    b.style.cssText = 'position:fixed;left:50%;top:calc(8px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:150;padding:8px 18px;font-size:16px;box-shadow:0 4px 14px rgba(0,0,0,.4)';
-    b.textContent = '新しいゲームがあるよ・タップで新しくする';
-    b.onclick = () => saveThenReload(newV);
-    document.body.appendChild(b);
+  // お知らせのカード（新しい版が出たとき／新しくしたあと）
+  const escH = t => String(t).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  function card(title, notes, btns){
+    const old = document.getElementById('tgUpdCard'); if(old) old.remove();
+    const d = document.createElement('div'); d.id = 'tgUpdCard';
+    d.style.cssText = 'position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:170;width:min(440px,calc(100% - 24px));max-height:calc(100% - 24px);overflow:auto;-webkit-overflow-scrolling:touch;background:var(--panel,#1d2a30);color:inherit;border:1px solid var(--line,#3a4a52);border-radius:16px;padding:14px 16px;box-shadow:0 8px 28px rgba(0,0,0,.55)';
+    const list = (notes && notes.length) ? '<ul style="margin:8px 0 4px;padding-left:20px;font-size:14px;line-height:1.6">' + notes.map(n => '<li>' + escH(n) + '</li>').join('') + '</ul>' : '';
+    d.innerHTML = '<strong style="font-size:17px">' + escH(title) + '</strong>' + list + '<div class="row" style="gap:8px;margin-top:10px;justify-content:flex-end"></div>';
+    const row = d.lastChild;
+    btns.forEach(([label, primary, fn, id]) => { const b = document.createElement('button'); if(id) b.id = id; if(primary) b.className = 'primary'; b.style.cssText = 'min-height:44px;padding:8px 18px;font-size:16px'; b.textContent = label; b.onclick = () => fn(b); row.appendChild(b); });
+    document.body.appendChild(d); return d;
   }
+  let newNotes = [], later = 0;
+  function showBtn(){
+    if(shown || Date.now() < later) return; shown = true;
+    card('新しいゲームがあるよ', newNotes, [
+      ['あとで', false, () => { const c = document.getElementById('tgUpdCard'); if(c) c.remove(); shown = false; later = Date.now() + 10*60*1000; }],
+      ['新しくする', true, () => saveThenReload(newV), 'tgUpd']
+    ]);
+  }
+  // 新しくしたあと、1回だけ「ここが変わったよ」を出す
+  function whatsNew(j){
+    let seen = null; try{ seen = localStorage.getItem('tougei_seen_build'); }catch(e){}
+    try{ localStorage.setItem('tougei_seen_build', BUILD); }catch(e){}
+    let has = false; try{ has = !!localStorage.getItem('tougei-go-v1'); }catch(e){}
+    if((!seen && !has) || seen === BUILD || !j.notes || !j.notes.length) return; // はじめての人には出さない
+    card('ゲームが新しくなったよ', j.notes, [['OK', true, () => { const c = document.getElementById('tgUpdCard'); if(c) c.remove(); }]]);
+  }
+  let first = true;
   async function check(){
     if(!BUILD) return;
     try{
       const j = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json());
-      if(j && j.v && j.v !== BUILD){ newV = j.v; showBtn(); }
+      if(j && j.v && j.v !== BUILD){ newV = j.v; newNotes = j.notes || []; showBtn(); }
+      else if(j && j.v === BUILD && first){ first = false; whatsNew(j); }
     }catch(e){}
   }
   document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') check(); });
   setInterval(check, 5 * 60 * 1000);
-  setTimeout(check, 8000);
+  setTimeout(check, 2500);
 
   window.TG = { on: !!rtdb, ready, list, get, queue, flush, remove, synced, newSid, changeFamily, renderSec, status: () => st, onStatus: f => listeners.push(f) };
 })();
