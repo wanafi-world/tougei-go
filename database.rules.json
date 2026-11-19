@@ -1,0 +1,10 @@
+{
+  "rules": {
+    "fam": {
+      "$fid": {
+        ".read":  "$fid.length >= 40",
+        ".write": "$fid.length >= 40"
+      }
+    }
+  }
+}
